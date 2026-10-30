@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+
+# Ensure UTF-8 locale for correct Chinese/multibyte input handling
+export LANG="${LANG:-en_US.UTF-8}"
+export LC_ALL="${LC_ALL:-en_US.UTF-8}"
+
+COMMIT_MSG_FILE=$1
+COMMIT_SOURCE=$2
+
+# Pass through: amend, merge, squash, already-formatted messages
+if [ "$COMMIT_SOURCE" = "commit" ] || [ "$COMMIT_SOURCE" = "merge" ] || [ "$COMMIT_SOURCE" = "squash" ]; then
+    exit 0
+fi
+
+if grep -qE "^(feat|fix|docs|style|refactor|perf|test|chore|build|ci|revert)(\([a-zA-Z0-9_,/-]+\))?: .+" "$COMMIT_MSG_FILE"; then
+    exit 0
+fi
+
+# Explicit messages remain under the author's control.
+if [ "$COMMIT_SOURCE" = "message" ] || grep -qE '^[[:space:]]*[^#[:space:]]' "$COMMIT_MSG_FILE"; then
+    exit 0
+fi
+
+exec < /dev/tty || exit 1
+
+# Abort commit cleanly on Ctrl+C or Ctrl+D
+trap 'echo "" >&2; echo "已取消提交。" >&2; exit 1' INT TERM HUP
+
+select_type() {
+    echo "" >&2
+    echo "请选择提交类型（Ctrl+C 取消）：" >&2
+    local options=(
+        "feat     - 新功能"
+        "fix      - Bug 修复"
+        "docs     - 文档变更"
+        "style    - 代码格式（不影响逻辑）"
+        "refactor - 代码重构"
+        "perf     - 性能优化"
+        "test     - 测试相关"
+        "chore    - 构建/工具链"
+    )
+    PS3="请输入数字选择类型 [1-8]："
+    select _ in "${options[@]}"; do
+        case $REPLY in
+            1) echo "feat"; break ;;
+            2) echo "fix"; break ;;
+            3) echo "docs"; break ;;
+            4) echo "style"; break ;;
+            5) echo "refactor"; break ;;
+            6) echo "perf"; break ;;
+            7) echo "test"; break ;;
+            8) echo "chore"; break ;;
+            "") echo "" >&2; echo "已取消提交。" >&2; exit 1 ;;
+            *) echo "无效选项，请重试。" >&2 ;;
+        esac
+    done
+    [ -n "$REPLY" ] || return 1
+}
+
+select_scope() {
+    echo "" >&2
+    echo "请选择影响范围：" >&2
+    local options=(
+        "logkit   - 日志库"
+        "app      - 示例应用"
+        "build    - 构建配置"
+        "none     - 不指定范围"
+        "other    - 自定义范围"
+    )
+    PS3="请输入数字选择范围 [1-5]："
+    select _ in "${options[@]}"; do
+        case $REPLY in
+            1) echo "logkit"; break ;;
+            2) echo "app";    break ;;
+            3) echo "build";  break ;;
+            4) echo "";       break ;;
+            5)
+                echo "" >&2
+                echo "请输入自定义范围（如业务模块名、功能名等）：" >&2
+                read -re custom_scope || { echo "" >&2; echo "已取消提交。" >&2; exit 1; }
+                echo "$custom_scope"
+                break
+                ;;
+            "") echo "" >&2; echo "已取消提交。" >&2; exit 1 ;;
+            *)  echo "无效选项，请重试。" >&2 ;;
+        esac
+    done
+    [ -n "$REPLY" ] || return 1
+}
+
+get_subject() {
+    echo "" >&2
+    echo "请输入提交描述：" >&2
+    read -re subject || { echo "" >&2; echo "已取消提交。" >&2; exit 1; }
+    if [ -z "$subject" ]; then
+        echo "提交描述不能为空。" >&2
+        return 1
+    fi
+    echo "$subject"
+}
+
+type_name=$(select_type) || exit 1
+[ -n "$type_name" ] || exit 1
+scope=$(select_scope) || exit 1
+subject=$(get_subject) || exit 1
+
+if [ -n "$scope" ]; then
+    printf '%s(%s): %s\n' "$type_name" "$scope" "$subject" > "$COMMIT_MSG_FILE"
+else
+    printf '%s: %s\n' "$type_name" "$subject" > "$COMMIT_MSG_FILE"
+fi
+echo "" >&2
+echo "提交信息已保存。" >&2
