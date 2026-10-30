@@ -1,8 +1,14 @@
 package ink.x2.logkit
 
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 
 object LogKit {
     const val TAG = "LogKit"
@@ -10,23 +16,41 @@ object LogKit {
     private val MIDDLE_BORDER = "├" + "┄".repeat(50)
     private val BOTTOM_BORDER = "└" + "─".repeat(50)
 
-
-    enum class LogType {
-        LINE,
-        BORDER
+    enum class LogType{
+        BORDER,
+        LINE
     }
+
     data class Config(
-        val logType: LogType = LogType.BORDER,
         val enable: Boolean = true,
-        val minLevel: Int = Log.VERBOSE
+        val minLevel: Int = Log.VERBOSE,
+        val logFilePath: File? = null,
+        val logMaxBuffer: Long = 5L * 1024 * 1024,
+        val logType: LogType = LogType.BORDER
     )
     var config: Config = Config()
     val printLock =Any()
+    private val logScope = CoroutineScope(
+        SupervisorJob() + Dispatchers.IO
+    )
+
+    lateinit var logManager: LogManager
+
+    fun init(initConfig: Config){
+        config=initConfig
+        config.logFilePath?.let {
+            logManager = LogManager(it, config.logMaxBuffer)
+           logScope.launch {
+               logManager.collectLogcat(config.minLevel)
+           }
+        }
+    }
+
     fun v(tag: String, msg: () -> Any) {
         if(!config.enable) return
         if(config.minLevel>Log.VERBOSE) return
-        val threadName=Thread.currentThread().name
         synchronized(printLock){
+            val threadName=Thread.currentThread().name
             when(config.logType){
                 LogType.LINE -> {
                     printLineLog(tag,threadName,msg){ key, value ->
@@ -43,90 +67,24 @@ object LogKit {
 
     }
     fun d(tag: String, msg: () -> Any) {
-        if(!config.enable) return
-        if(config.minLevel>Log.DEBUG) return
-        val threadName=Thread.currentThread().name
-        synchronized(printLock){
-            when(config.logType){
-                LogType.LINE -> {
-                    printLineLog(tag,threadName,msg){ key, value ->
-                        Log.d(key,value)
-                    }
-                }
-                LogType.BORDER -> {
-                    printBorderLog(tag,threadName,msg){ key, value ->
-                        Log.d(key,value)
-                    }
-                }
-            }
-        }
+
 
     }
     fun i(tag: String, msg: () -> Any) {
-        if(!config.enable) return
-        if(config.minLevel>Log.INFO) return
-        val threadName=Thread.currentThread().name
-        synchronized(printLock){
-            when(config.logType){
-                LogType.LINE -> {
-                    printLineLog(tag,threadName,msg){ key, value ->
-                        Log.i(key,value)
-                    }
-                }
-                LogType.BORDER -> {
-                    printBorderLog(tag,threadName,msg){ key, value ->
-                        Log.i(key,value)
-                    }
-                }
-            }
-        }
+
 
     }
     fun w(tag: String, msg: () -> Any) {
-        if(!config.enable) return
-        if(config.minLevel>Log.WARN) return
-        val threadName=Thread.currentThread().name
-        synchronized(printLock){
-            when(config.logType){
-                LogType.LINE -> {
-                    printLineLog(tag,threadName,msg){ key, value ->
-                        Log.w(key,value)
-                    }
-                }
-                LogType.BORDER -> {
-                    printBorderLog(tag,threadName,msg){ key, value ->
-                        Log.w(key,value)
-                    }
-                }
-            }
-        }
+
 
     }
     fun e(tag: String, msg: () -> Any) {
-        if(!config.enable) return
-        if(config.minLevel>Log.ERROR) return
-        val threadName=Thread.currentThread().name
-        synchronized(printLock){
-            when(config.logType){
-                LogType.LINE -> {
-                    printLineLog(tag,threadName,msg){ key, value ->
-                        Log.e(key,value)
-                    }
-                }
-                LogType.BORDER -> {
-                    printBorderLog(tag,threadName,msg){ key, value ->
-                        Log.e(key,value)
-                    }
-                }
-            }
-        }
 
     }
     fun a(tag: String, msg: () -> Any) {
 
     }
     fun printLineLog(tag:String, threadName: String,msg: () -> Any,print:(tag:String, value:String)-> Unit){
-        print("$TAG-$tag","Thread：$threadName")
         when(val text = msg()){
             is String->{
                 val sType = isJson(text)
@@ -140,22 +98,22 @@ object LogKit {
                             printText= JSONArray(text).toString()
                         }
                     }
-                    print("$TAG-$tag", printText)
+                    print("$TAG-$tag-$threadName", printText)
                 }else{
                     val lines = text.split("\n")
                     lines.forEach {
-                        print("$TAG-$tag", it)
+                        print("$TAG-$tag-$threadName", it)
                     }
                 }
             }
             is Number->{
-                print("$TAG-$tag", text.toString())
+                print("$TAG-$tag-$threadName", text.toString())
             }
             is Exception->{
-                print("$TAG-$tag", text.stackTraceToString())
+                print("$TAG-$tag-$threadName", text.stackTraceToString())
             }
             else ->{
-                print("$TAG-$tag", text.toString())
+                print("$TAG-$tag-$threadName", text.toString())
             }
         }
     }

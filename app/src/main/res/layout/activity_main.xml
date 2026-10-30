@@ -7,4 +7,23 @@
     android:layout_height="match_parent"
     tools:context=".MainActivity">
 
+    <ScrollView
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:fillViewport="true"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:id="@+id/test_result"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:padding="24dp"
+            android:textIsSelectable="true"
+            android:textSize="16sp"
+            tools:text="日志目录\n文件轮转阈值：5MB\n\n正在执行 Logcat 落盘测试…" />
+    </ScrollView>
+
 </androidx.constraintlayout.widget.ConstraintLayout>
