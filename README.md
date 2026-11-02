@@ -23,23 +23,33 @@ LogKit/
 └── app/       示例应用：使用示例与启动自测
 ```
 
-当前库模块最低支持 **Android 11 / API 30**，项目使用 Compile SDK 37。
+最低支持 **Android 11 / API 30**。`1.0.0` 的 AAR 要求接入应用使用 **Compile SDK 37 或更高版本**。
 
 ## 接入
 
-当前仓库采用源码模块方式使用。在应用模块的 `build.gradle.kts` 中添加：
+在项目的 `settings.gradle.kts` 中配置仓库：
 
 ```kotlin
-dependencies {
-    implementation(project(":logkit"))
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+    }
 }
 ```
 
-项目根目录的 `settings.gradle.kts` 需要包含该模块，本仓库已配置：
+在应用模块的 `build.gradle.kts` 中添加依赖：
 
 ```kotlin
-include(":logkit")
+dependencies {
+    implementation("ink.x2:logkit:1.0.0")
+}
 ```
+
+使用发布版本时，无需复制 `logkit` 源码或添加 `include(":logkit")`。
+
+如果需要修改库源码，可以克隆本仓库，将 app 中的 `implementation(libs.logkit)` 改为
+`implementation(project(":logkit"))`；本仓库已包含该模块。
 
 ## 快速使用
 
@@ -102,6 +112,19 @@ class LogKitApplication : Application() {
 ```
 
 将这个类配置为应用的 `Application`；如果已有自己的 `Application`，将初始化代码放入现有类即可。
+
+```xml
+<application android:name=".LogKitApplication">
+    <!-- 保留应用现有的 Activity 等配置 -->
+</application>
+```
+
+初始化后，Activity、ViewModel 等位置直接调用 `LogKit.v/d/i/w/e`，无需重复初始化：
+
+```kotlin
+LogKit.v("Demo") { "应用启动，日志同时写入本地文件" }
+LogKit.v("LongText") { "中文😀abc".repeat(2000) }
+```
 
 这里使用应用专属外部目录，示例应用对应的路径为：
 
@@ -215,7 +238,8 @@ flowchart LR
 
 ## 示例与验证
 
-用 Android Studio 打开项目，选择 `app` 运行。示例启动后自动执行自测，并在页面显示日志目录、5MB 轮转阈值和各组测试结果：
+用 Android Studio 打开项目，选择 `app` 运行。app 使用 Maven Central 的 `ink.x2:logkit:1.0.0`，
+由 `LogKitApplication` 在进程启动时初始化一次，`MainActivity` 启动自测。页面显示日志目录、5MB 轮转阈值和各组测试结果：
 
 1. 原生 `Log.v` 收集及 `threadtime` 格式。
 2. `LogKit.v` 数据类型与异常输出。
@@ -230,6 +254,7 @@ flowchart LR
 
 相关代码：
 
+- [LogKitApplication](app/src/main/java/ink/x2/demo/LogKitApplication.kt)
 - [MainActivity](app/src/main/java/ink/x2/demo/MainActivity.kt)
 - [LogcatTestCases](app/src/main/java/ink/x2/demo/LogcatTestCases.kt)
 - [LongLogTestCases](app/src/main/java/ink/x2/demo/LongLogTestCases.kt)
@@ -239,3 +264,37 @@ flowchart LR
 ```shell
 ./gradlew :app:assembleDebug
 ```
+
+## 发布到 Maven Central
+
+发布坐标配置为 `ink.x2:logkit:1.0.0`，需要 Central 中的 `ink.x2` 命名空间已验证。
+
+1. 在 [Central User Token 页面](https://central.sonatype.com/usertoken)点击 **Generate User Token**，保存生成的 Username 和 Password。
+2. 本机需要 Python 3 和 GnuPG；macOS 可使用 `brew install gnupg` 安装 GnuPG。
+3. 在本机终端执行初始化，按提示输入 Token、公开的签名者信息和密钥口令。如果本机已保存 Token，脚本会自动读取：
+
+   ```shell
+   python3 scripts/publish.py setup
+   ```
+
+   脚本会在本项目的 `.publishing/` 下创建专用密钥环，并将公钥发布到公钥服务器。该目录已被 Git 忽略；不会修改全局 Gradle 或 GPG 配置。签名者名字和邮箱随公钥公开，密钥口令不写入配置文件。请备份该目录并保管口令。
+
+4. 本地构建并核验签名：
+
+   ```shell
+   python3 scripts/publish.py check
+   ```
+
+5. 上传到 Central：
+
+   ```shell
+   python3 scripts/publish.py upload
+   ```
+
+   上传后进入 Central 的 **Deployments**，检查校验结果，通过后点击 **Publish**。`upload` 不会自动执行最终发布。同一坐标与版本发布后不能覆盖。
+
+公钥通过服务器的 HTTPS 接口提交，并重新下载核对指纹。上传失败时，本地配置仍保留，可用 `python3 scripts/publish.py publish-key` 重试，无需重复生成密钥。
+
+## 许可证
+
+本项目使用 [MIT License](LICENSE)。
