@@ -27,7 +27,8 @@ object LogKit {
         val minLevel: Int = Log.VERBOSE,
         val logFilePath: File? = null,
         val logMaxBuffer: Long = 5L * 1024 * 1024,
-        val logType: LogType = LogType.BORDER
+        val logType: LogType = LogType.BORDER,
+        val lineSize: Int = 4000
     )
 
     var config: Config = Config()
@@ -177,29 +178,56 @@ object LogKit {
                             printText = JSONArray(text).toString()
                         }
                     }
-                    print("$TAG-$tag-$threadName", printText)
+                    splitLog(printText).forEach {lineText ->
+                        print("$TAG-$tag-$threadName", lineText)
+                    }
                 } else {
                     val lines = text.split("\n")
                     lines.forEach {
-                        print("$TAG-$tag-$threadName", it)
+                        splitLog(it).forEach {lineText ->
+                            print("$TAG-$tag-$threadName", lineText)
+                        }
                     }
                 }
             }
 
             is Number -> {
-                print("$TAG-$tag-$threadName", text.toString())
+                splitLog(text.toString()).forEach {lineText ->
+                    print("$TAG-$tag-$threadName", lineText)
+                }
             }
 
             is Exception -> {
-                print("$TAG-$tag-$threadName", text.stackTraceToString())
+                splitLog(text.stackTraceToString()).forEach {lineText ->
+                    print("$TAG-$tag-$threadName", lineText)
+                }
             }
 
             else -> {
-                print("$TAG-$tag-$threadName", text.toString())
+                splitLog(text.toString()).forEach {lineText ->
+                    print("$TAG-$tag-$threadName", lineText)
+                }
             }
         }
     }
-
+    fun splitLog(message: String): Array<String> {
+        val bytes = message.toByteArray(Charsets.UTF_8)
+        if (bytes.isEmpty()) return arrayOf("")
+        val chunks = mutableListOf<String>()
+        var start = 0
+        val lineSize = config.lineSize.coerceIn(4, 4000)
+        while (start < bytes.size) {
+            var end = start + minOf(lineSize, bytes.size - start)
+            if (end < bytes.size) {
+                while ((bytes[end].toInt() and 0xC0) == 0x80) {
+                    end--
+                }
+            }
+            chunks += String(bytes, start, end - start, Charsets.UTF_8)
+            start = end
+        }
+        return chunks.toTypedArray()
+    }
     fun printBorderLog(
         tag: String,
         threadName: String,
@@ -224,28 +252,38 @@ object LogKit {
                         }
                     }
                     printText.lineSequence().forEach {
-                        print("$TAG-$tag", "| $it")
+                        splitLog(it).forEach {lineText ->
+                            print("$TAG-$tag", "| $lineText")
+                        }
                     }
                 } else {
                     val lines = text.split("\n")
                     lines.forEach {
-                        print("$TAG-$tag", "| $it")
+                        splitLog(it).forEach {lineText ->
+                            print("$TAG-$tag", "| $lineText")
+                        }
                     }
                 }
             }
 
             is Number -> {
-                print("$TAG-$tag", "| $text")
+                splitLog(text.toString()).forEach {lineText ->
+                    print("$TAG-$tag", "| $lineText")
+                }
             }
 
             is Exception -> {
                 text.stackTraceToString().lineSequence().forEach {
-                    print("$TAG-$tag", "| $it")
+                    splitLog(it).forEach {lineText ->
+                        print("$TAG-$tag", "| $lineText")
+                    }
                 }
             }
 
             else -> {
-                print("$TAG-$tag", "| $text")
+                splitLog(text.toString()).forEach {lineText ->
+                    print("$TAG-$tag", "| $lineText")
+                }
             }
         }
         print("$TAG-$tag", BOTTOM_BORDER)
