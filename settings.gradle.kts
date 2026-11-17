@@ -25,3 +25,4 @@ dependencyResolutionManagement {
 rootProject.name = "LogKit"
 include(":app")
 include(":logkit")
+include(":record")
